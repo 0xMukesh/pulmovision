@@ -1,10 +1,14 @@
 import torchvision.transforms as transforms
+
+import torch
+from torch import nn
+from torch import optim
 import torch.utils.data as data
 
-from medmnist import INFO, ChestMNIST
-from constants import DATASET_NAME, SHOULD_DOWNLOAD, BATCH_SIZE
+from medmnist import INFO, ChestMNIST, Evaluator
 
-import matplotlib.pyplot as plt
+from constants import DATASET_NAME, SHOULD_DOWNLOAD, BATCH_SIZE, LEARNING_RATE, N_EPOCHS
+from model import Model, train_model
 
 
 class DataClass(ChestMNIST):
@@ -12,6 +16,8 @@ class DataClass(ChestMNIST):
         super().__init__(split=split, transform=transform,
                          target_transform=target_transform, download=download)
 
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 info = INFO[DATASET_NAME]
 task = info['task']
@@ -31,16 +37,52 @@ train_dataset = DataClass(
 test_dataset = DataClass(
     split="test", transform=data_transform, download=SHOULD_DOWNLOAD)
 
-train_loader = data.DataLoader(
+train_data_loader = data.DataLoader(
     dataset=train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-train_eval_loader = data.DataLoader(
+train_eval_data_loader = data.DataLoader(
     dataset=train_dataset, batch_size=2*BATCH_SIZE, shuffle=False)
-test_loader = data.DataLoader(
+test_data_loader = data.DataLoader(
     dataset=test_dataset, batch_size=2*BATCH_SIZE, shuffle=False)
 
-montage = train_dataset.montage(length=20)
 
-plt.figure(figsize=(10, 10))
-plt.imshow(montage, cmap='gray')
-plt.axis('off')
-plt.show()
+model = Model(in_channels=n_channels, num_classes=n_classes).to(device=device)
+loss_function = nn.CrossEntropyLoss()
+optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
+
+train_model(model, train_data_loader, optimizer, loss_function)
+
+
+def test(split):
+    model.eval()
+
+    y_true = torch.tensor([])
+    y_score = torch.tensor([])
+
+    data_loader = train_eval_data_loader if split == "train" else test_data_loader
+
+    with torch.no_grad():
+        for inputs, targets in data_loader:
+            outputs = model(inputs)
+
+            if task == "multi-label, binary-class":
+                targets = targets.to(torch.float32)
+                outputs = outputs.softmax(dim=-1)
+            else:
+                targets = targets.squeeze().long()
+                outputs = outputs.softmax(dim=-1)
+                targets = targets.float().resize_(len(targets), 1)
+
+            y_true = torch.cat((y_true, targets), 0)
+            y_score = torch.cat((y_score, outputs), 0)
+
+        y_true = y_true.numpy()
+        y_score = y_score.detach().numpy()
+
+        evaluator = Evaluator(DATASET_NAME, split)
+        metrics = evaluator.evaluate(y_score)
+
+        print('%s  auc: %.3f  acc:%.3f' % (split, *metrics))
+
+
+print("Testing the model...")
+test(split="train")
