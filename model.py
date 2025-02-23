@@ -13,6 +13,10 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.resnet = models.resnet50(weights='IMAGENET1K_V2')
 
+        for name, param in self.resnet.named_parameters():
+            if not name.startswith("layer4") and not name.startswith("fc"):
+                param.requires_grad = False
+
         if grayscale_input:
             self.resnet.conv1 = nn.Conv2d(
                 1, 64, kernel_size=7, stride=2, padding=3, bias=False)
