@@ -1,57 +1,32 @@
 import torch
 from torch import nn
+import numpy as np
 from medmnist import Evaluator
-from constants import DATASET_NAME
+from sklearn.metrics import f1_score
+import torchvision.models as models
+
+from constants import DATASET_NAME, DATASET_CLASSES
 
 
 class Model(nn.Module):
-    def __init__(self, in_channels, num_classes):
-        # calls the parent class constructor
+    def __init__(self, num_classes=14, grayscale_input=True):
         super(Model, self).__init__()
+        self.resnet = models.resnet50(weights='IMAGENET1K_V2')
 
-        self.layer_one = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=3),
-            nn.BatchNorm2d(16),
-            nn.ReLU())
+        if grayscale_input:
+            self.resnet.conv1 = nn.Conv2d(
+                1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
-        self.layer_two = nn.Sequential(
-            nn.Conv2d(16, 16, kernel_size=3),
-            nn.BatchNorm2d(16),
+        num_features = self.resnet.fc.in_features
+        self.resnet.fc = nn.Sequential(
+            nn.Linear(num_features, 512),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2))
-
-        self.layer_three = nn.Sequential(
-            nn.Conv2d(16, 64, kernel_size=3),
-            nn.BatchNorm2d(64),
-            nn.ReLU())
-
-        self.layer_four = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3),
-            nn.BatchNorm2d(64),
-            nn.ReLU())
-
-        self.layer_five = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2))
-
-        self.fully_connected = nn.Sequential(
-            nn.Linear(64 * 4 * 4, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, num_classes))
+            nn.Dropout(0.3),
+            nn.Linear(512, num_classes)
+        )
 
     def forward(self, x):
-        x = self.layer_one(x)
-        x = self.layer_two(x)
-        x = self.layer_three(x)
-        x = self.layer_four(x)
-        x = self.layer_five(x)
-        x = x.view(x.size(0), -1)  # flattens the feature maps
-        x = self.fully_connected(x)
-        return x
+        return self.resnet(x)
 
 
 def train_model(model, train_data_loader, optimizer, loss_function, device, num_epochs=3):
@@ -101,7 +76,24 @@ def test_model(model, split, test_data_loader, device):
         y_true = y_true.cpu().numpy()
         y_score = y_score.cpu().numpy()
 
-        evaluator = Evaluator(DATASET_NAME, split)
-        metrics = evaluator.evaluate(y_score)
+        # converting probabilities to binary predictions with 0.5 as the threshold
+        y_pred = (y_score >= 0.5).astype(np.float32)
 
-        print('%s  auc: %.3f  acc:%.3f' % (split, *metrics))
+        evaluator = Evaluator(DATASET_NAME, split)
+        auc_acc_metrics = evaluator.evaluate(y_score)
+
+        # aggregates all classes together
+        micro_f1 = f1_score(y_true, y_pred, average='micro')
+        # calculates f1 for each class and takes the average
+        macro_f1 = f1_score(y_true, y_pred, average='macro')
+        per_class_f1 = f1_score(y_true, y_pred, average=None)
+
+        print(
+            f"{split}  auc: {auc_acc_metrics[0]:.3f}  acc:{auc_acc_metrics[1]:.3f}")
+        print(f"{split}  micro_f1: {micro_f1:.3f}  macro_f1: {macro_f1:.3f}\n")
+        print("per-class f1:")
+
+        for i, (class_name, f1) in enumerate(zip(DATASET_CLASSES, per_class_f1)):
+            print(f"{class_name}: {f1:.3f}")
+
+        return auc_acc_metrics, micro_f1, macro_f1, per_class_f1
