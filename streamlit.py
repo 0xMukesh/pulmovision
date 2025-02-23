@@ -30,7 +30,7 @@ st.title("notyetfiguredout")
 st.write("upload an image of chest x-ray for analysis")
 
 uploaded_file = st.file_uploader(
-    "Choose an image", type=["jpg", "jpeg", "png"])
+    "choose an image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
@@ -43,8 +43,7 @@ if uploaded_file is not None:
             model = Model(in_channels=1, num_classes=14).to(device)
 
             try:
-                checkpoint = torch.load(
-                    "/home/mukesh/dev/biomed/model.pth", map_location=device)
+                checkpoint = torch.load("model.pth", map_location=device)
 
                 model_state_dict = checkpoint["model_state_dict"]
 
@@ -59,12 +58,9 @@ if uploaded_file is not None:
                 significant_findings = [
                     (label, prob) for label, prob in zip(DATASET_CLASSES, preds) if prob > 0.1]
 
-                if significant_findings:
-                    for label, prob in sorted(significant_findings, key=lambda x: x[1], reverse=True):
-                        st.write(f"{label}: {prob:.3%}")
-                        st.progress(float(prob))
-                else:
-                    st.write("no significant findings found (threshold: 10%)")
+                for label, prob in sorted(significant_findings, key=lambda x: x[1], reverse=True):
+                    st.write(f"{label}: {prob:.3%}")
+                    st.progress(float(prob))
 
             except Exception as e:
                 st.error(f"err loading model: {str(e)}")
