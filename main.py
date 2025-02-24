@@ -20,6 +20,7 @@ train_data_transform = transforms.Compose([
     transforms.Resize((224, 224)),  # ResNet50 expects 224x224 input
     transforms.ToTensor(),
     transforms.Normalize(mean=[.5], std=[.5]),
+
     transforms.RandomHorizontalFlip(),
     transforms.RandomRotation(10),
     transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),

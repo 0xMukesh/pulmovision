@@ -11,7 +11,7 @@ from constants import DATASET_NAME, DATASET_CLASSES
 class Model(nn.Module):
     def __init__(self, num_classes=14, grayscale_input=True):
         super(Model, self).__init__()
-        self.resnet = models.resnet50(weights='IMAGENET1K_V2')
+        self.resnet = models.resnet50(weights="IMAGENET1K_V2")
 
         for name, param in self.resnet.named_parameters():
             if not name.startswith("layer4") and not name.startswith("fc"):
@@ -33,6 +33,56 @@ class Model(nn.Module):
         return self.resnet(x)
 
 
+class CNN(nn.Module):
+    def __init__(self, in_channels, num_classes):
+        # calls the parent class constructor
+        super(CNN, self).__init__()
+
+        self.layer_one = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=3),
+            nn.BatchNorm2d(16),
+            nn.ReLU())
+
+        self.layer_two = nn.Sequential(
+            nn.Conv2d(16, 16, kernel_size=3),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+
+        self.layer_three = nn.Sequential(
+            nn.Conv2d(16, 64, kernel_size=3),
+            nn.BatchNorm2d(64),
+            nn.ReLU())
+
+        self.layer_four = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3),
+            nn.BatchNorm2d(64),
+            nn.ReLU())
+
+        self.layer_five = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+
+        self.fully_connected = nn.Sequential(
+            nn.Linear(64 * 4 * 4, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, num_classes))
+
+    def forward(self, x):
+        x = self.layer_one(x)
+        x = self.layer_two(x)
+        x = self.layer_three(x)
+        x = self.layer_four(x)
+        x = self.layer_five(x)
+        x = x.view(x.size(0), -1)  # flattens the feature maps
+        x = self.fully_connected(x)
+        return x
+
+
 def train_model(model, train_data_loader, optimizer, loss_function, device, num_epochs=3):
     model.train()
 
@@ -49,7 +99,7 @@ def train_model(model, train_data_loader, optimizer, loss_function, device, num_
 
             loss.backward()
             optimizer.step()
-
+            
             running_loss += loss.item()
 
             if i % 100 == 99:

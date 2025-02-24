@@ -2,7 +2,7 @@ import streamlit as st
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
-from model import Model
+from model import CNN
 from constants import DATASET_CLASSES
 
 
@@ -40,14 +40,13 @@ if uploaded_file is not None:
         with st.spinner("analyzing..."):
             device = torch.device(
                 "cuda" if torch.cuda.is_available() else "cpu")
-            model = Model(in_channels=1, num_classes=14).to(device)
 
             try:
                 checkpoint = torch.load("model.pth", map_location=device)
 
                 model_state_dict = checkpoint["model_state_dict"]
 
-                model = Model(in_channels=1, num_classes=14)
+                model = CNN(in_channels=1, num_classes=14)
                 model.load_state_dict(model_state_dict)
 
                 processed_image = preprocess_image(image)
